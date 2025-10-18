@@ -1,0 +1,190 @@
+import React, { Suspense, useRef, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Html, useProgress, useGLTF, softShadows } from '@react-three/drei';
+
+// InteractiveCell3D-with-GLTF.jsx
+// Replaces primitive organelles with GLTF/GLB models for realistic rendering.
+// Drop into a React project (Vite or CRA). Put GLTF files in `public/models/` or host them
+// remotely and provide URLs in the `models` map below.
+
+softShadows();
+
+function Loader() {
+  const { progress } = useProgress();
+  return (
+    <Html center>
+      <div style={{ color: 'white' }}>{Math.round(progress)}% loading</div>
+    </Html>
+  );
+}
+
+/**
+ * Generic GLTF Model loader component
+ * Props:
+ *  - url: string (required) : public URL to the .glb/.gltf file
+ *  - scale: number or [x,y,z]
+ *  - position: [x,y,z]
+ *  - rotation: [x,y,z]
+ *  - name: string (for click handlers / accessibility)
+ */
+function GLTFModel({ url, scale = 1, position = [0, 0, 0], rotation = [0, 0, 0], name, onClick }) {
+  // useGLTF handles caching and incremental loading
+  const gltf = useGLTF(url, true);
+  const ref = useRef();
+
+  // gentle floating animation
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    ref.current.rotation.y = rotation[1] + Math.sin(t * 0.7) * 0.03;
+    ref.current.position.y = position[1] + Math.sin(t * 0.6) * 0.02;
+  });
+
+  // If the gltf contains a scene, we render it as a group
+  return (
+    <group ref={ref} scale={Array.isArray(scale) ? scale : [scale, scale, scale]} position={position} rotation={rotation} onClick={() => onClick?.(name)}>
+      <primitive object={gltf.scene} dispose={null} />
+    </group>
+  );
+}
+
+export default function InteractiveCell3D_GLTF() {
+  const [selected, setSelected] = useState(null);
+
+  // Map organelle keys to model URLs. Replace with your own .glb URLs
+  const models = {
+    Nucleus: '/models/nucleus.glb',
+    Mitochondrion: '/models/mitochondrion.glb',
+    Golgi: '/models/golgi.glb',
+    RibosomeCluster: '/models/ribosome_cluster.glb',
+    Lysosome: '/models/lysosome.glb',
+  };
+
+  const organelleInfo = {
+    Nucleus: { short: 'Control center — holds DNA and coordinates cell activities.' },
+    Mitochondrion: { short: 'Powerhouse — produces ATP.' },
+    Golgi: { short: 'Packages and modifies proteins.' },
+    RibosomeCluster: { short: 'Synthesizes proteins from mRNA.' },
+    Lysosome: { short: 'Breaks down waste and cellular debris.' },
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 16, padding: 16 }}>
+      <div style={{ flex: 1, height: 680, borderRadius: 12, overflow: 'hidden', background: '#071023' }}>
+        <Canvas shadows camera={{ position: [0, 3, 7], fov: 45 }}>
+          <Suspense fallback={<Loader />}>
+            <ambientLight intensity={0.4} />
+            <directionalLight castShadow position={[5, 8, 6]} intensity={0.9} shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+
+            {/* translucent cell membrane sphere (keeps context) */}
+            <mesh receiveShadow>
+              <sphereGeometry args={[3.2, 64, 64]} />
+              <meshStandardMaterial transparent opacity={0.12} roughness={0.9} color={'#9EE7C6'} side={2} />
+            </mesh>
+
+            {/* Example placement — when you add your .glb files, adjust scale/positions to match */}
+            {models.Nucleus && (
+              <GLTFModel url={models.Nucleus} scale={0.9} position={[0, 0.3, 0]} rotation={[0, 0, 0]} name={'Nucleus'} onClick={(n) => setSelected(n)} />
+            )}
+
+            {models.Mitochondrion && (
+              <GLTFModel url={models.Mitochondrion} scale={0.55} position={[-1.8, -0.4, -0.8]} rotation={[0, 0.3, 0]} name={'Mitochondrion'} onClick={(n) => setSelected(n)} />
+            )}
+
+            {models.Golgi && (
+              <GLTFModel url={models.Golgi} scale={0.9} position={[1.6, -0.3, -0.3]} rotation={[0, 0.2, 0]} name={'Golgi'} onClick={(n) => setSelected(n)} />
+            )}
+
+            {models.RibosomeCluster && (
+              <GLTFModel url={models.RibosomeCluster} scale={0.9} position={[-1.1, 0.8, 0.9]} rotation={[0, 0.4, 0]} name={'RibosomeCluster'} onClick={(n) => setSelected(n)} />
+            )}
+
+            {models.Lysosome && (
+              <GLTFModel url={models.Lysosome} scale={0.5} position={[1.4, 0.6, 1.0]} rotation={[0, 0.2, 0]} name={'Lysosome'} onClick={(n) => setSelected(n)} />
+            )}
+
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.6, 0]} receiveShadow>
+              <planeGeometry args={[40, 40]} />
+              <meshStandardMaterial transparent opacity={0} />
+            </mesh>
+
+            <OrbitControls enablePan enableRotate enableZoom />
+          </Suspense>
+        </Canvas>
+      </div>
+
+      <aside style={{ width: 340 }}>
+        <div style={{ background: 'white', padding: 14, borderRadius: 10, boxShadow: '0 6px 18px rgba(2,6,23,0.12)' }}>
+          <h2 style={{ margin: 0 }}>Organelle info</h2>
+          {!selected ? (
+            <p style={{ marginTop: 8 }}>Click a model in the 3D view to see details.</p>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              <h3 style={{ marginBottom: 6 }}>{selected}</h3>
+              <p style={{ marginTop: 0 }}>{organelleInfo[selected]?.short}</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button onClick={() => alert(`(Demo) Focus ${selected}`)}>Focus</button>
+                <button onClick={() => navigator.clipboard?.writeText(`${selected}: ${organelleInfo[selected]?.short}`)}>Copy</button>
+                <button onClick={() => setSelected(null)}>Clear</button>
+              </div>
+            </div>
+          )}
+
+          <hr style={{ margin: '12px 0' }} />
+
+          <div style={{ fontSize: 13, color: '#334155' }}>
+            <strong>Where to put your GLTF files</strong>
+            <ol>
+              <li>Place .glb/.gltf files under <code>public/models/</code> in your React app so they are served statically.</li>
+              <li>Alternatively host them remotely (Dropbox/Cloudflare/Netlify/GitHub release) and paste the public URLs into the <code>models</code> map.</li>
+              <li>When exporting from Blender, use File → Export → glTF 2.0 (.glb recommended) and ensure "+Y Up" and "Apply Modifiers" are set as needed.</li>
+            </ol>
+
+            <strong>Tips for best results</strong>
+            <ul>
+              <li>Center models at origin (0,0,0) in your 3D package before exporting — it makes positioning simpler.</li>
+              <li>Apply scale and rotation transforms in Blender (Ctrl+A) to avoid unexpected scales/rotations.</li>
+              <li>If models are heavy, enable DRACO compression and load with a DRACOLoader. (Instructions below.)</li>
+              <li>Use PBR materials and small texture sizes for web performance.</li>
+            </ul>
+
+            <strong>DRACO compressed glTF (optional)</strong>
+            <p style={{ marginTop: 6 }}>
+              If you use DRACO compression to reduce file size, you need to configure the DRACOLoader. Example:
+            </p>
+            <pre style={{ background: '#0f172a', color: '#e6eef8', padding: 8, borderRadius: 6, overflowX: 'auto' }}>
+{`import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
+import { useGLTF } from '@react-three/drei';
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('/draco/'); // path to draco decoder files in public/
+useGLTF.preload('/models/my_draco_model.glb');
+const gltf = useGLTF('/models/my_draco_model.glb');
+// In Vite/CRA copy the /draco/ folder from three/examples/jsm/libs to public/draco/
+`}
+            </pre>
+
+            <strong>Common issues</strong>
+            <ul>
+              <li>Blank model: check console for CORS or 404 errors. Ensure path is correct.</li>
+              <li>Incorrect scale/orientation: apply transforms in Blender or adjust <code>scale</code>/<code>rotation</code> props.</li>
+              <li>Slow loading: optimize textures, reduce mesh polycount, or use DRACO compression.</li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+/*
+Usage & deployment notes (quick):
+- Add files to public/models/ (nucleus.glb, mitochondrion.glb, ...)
+- npm i three @react-three/fiber @react-three/drei
+- Import and use <InteractiveCell3D_GLTF /> in your App.jsx
+- For GitHub Pages, build and deploy or use Vercel/Netlify for simple deployment
+
+If you upload your .glb files (or paste public URLs), I will:
+- adjust position/scale values to correctly fit the cell membrane,
+- add per-model interaction handlers (annotations, labels), and
+- optionally replace the default materials with custom shaders or baked AO for realism.
+*/
